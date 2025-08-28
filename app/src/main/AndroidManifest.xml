@@ -11,7 +11,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light">
 
-        <!-- CAMBIA EL NOMBRE COMPLETO CON TU PACKAGE -->
+        <!-- USA EL PUNTO AL INICIO para que use tu package actual -->
         <activity
             android:name="com.wil.photogallery.MainActivity"
             android:exported="true"

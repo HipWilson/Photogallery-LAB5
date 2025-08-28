@@ -1,3 +1,5 @@
+// Video: https://youtube.com/shorts/A4yya9Qmk0I
+
 package com.wil.photogallery
 
 import android.content.Context
@@ -46,34 +48,23 @@ data class Photo(
 
 // ViewModel para gestionar el estado de las fotos
 class PhotoGalleryViewModel : ViewModel() {
-    // StateFlow privado para las fotos
     private val _photos = MutableStateFlow<List<Photo>>(emptyList())
-
-    // StateFlow público de solo lectura
     val photos: StateFlow<List<Photo>> = _photos.asStateFlow()
 
-    // Función para añadir una foto desde el photo picker
     fun addPhoto(uri: Uri, context: Context) {
-        // Obtener el nombre de la imagen desde la URI
         val name = getImageName(uri, context)
         val newPhoto = Photo(uri, name)
-
-        // Añadir la nueva foto a la lista existente
         _photos.value = _photos.value + newPhoto
     }
 
-    // Función para añadir una foto desde la cámara
     fun addCameraPhoto(uri: Uri) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val name = "Foto_$timestamp.jpg"
         val newPhoto = Photo(uri, name)
-
         _photos.value = _photos.value + newPhoto
     }
 
-    // Función auxiliar para obtener el nombre de la imagen
     private fun getImageName(uri: Uri, context: Context): String {
-        // Intentar obtener el nombre real del archivo
         val cursor = context.contentResolver.query(uri, null, null, null, null)
         return cursor?.use {
             val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -90,32 +81,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Usamos MaterialTheme directamente
-            MaterialTheme(
-                colorScheme = lightColorScheme(),
-                typography = Typography(),
-                content = {
-                    PhotoGalleryApp()
-                }
-            )
+            // Tema simple y funcional
+            SimpleAppTheme {
+                PhotoGalleryApp()
+            }
         }
     }
 }
 
-// Definición básica de Typography
-val Typography = androidx.compose.material3.Typography()
+// Tema básico que funciona
+@Composable
+fun SimpleAppTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        content = content
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoGalleryApp(viewModel: PhotoGalleryViewModel = viewModel()) {
-    // Obtener el contexto actual
     val context = LocalContext.current
-
-    // Observar la lista de fotos usando collectAsStateWithLifecycle
     val photos by viewModel.photos.collectAsStateWithLifecycle()
-
-    // State para controlar si mostrar el menú de opciones
     var showOptionsDialog by remember { mutableStateOf(false) }
+    var hasCameraPermission by remember { mutableStateOf(false) }
 
     // Crear archivo temporal para la cámara
     val photoFile = remember {
@@ -130,16 +118,6 @@ fun PhotoGalleryApp(viewModel: PhotoGalleryViewModel = viewModel()) {
         )
     }
 
-    // Launcher para el photo picker
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        // Si se seleccionó una imagen, añadirla al ViewModel
-        uri?.let { selectedUri ->
-            viewModel.addPhoto(selectedUri, context)
-        }
-    }
-
     // Launcher para la cámara
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -149,62 +127,66 @@ fun PhotoGalleryApp(viewModel: PhotoGalleryViewModel = viewModel()) {
         }
     }
 
-    // Scaffold con barra superior y botón flotante
+    // Launcher para permisos
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+        if (isGranted) {
+            cameraLauncher.launch(photoUri)
+        }
+    }
+
+    // Launcher para galería
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            viewModel.addPhoto(selectedUri, context)
+        }
+    }
+
+    // Función para abrir cámara
+    fun openCamera() {
+        showOptionsDialog = false
+        permissionLauncher.launch(android.Manifest.permission.CAMERA)
+    }
+
+    // Scaffold principal
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Text(
                         text = "Fotos",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.Bold
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                }
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showOptionsDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                onClick = { showOptionsDialog = true }
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = "Añadir foto"
-                )
+                Icon(Icons.Filled.Add, "Añadir foto")
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Mostrar la cuadrícula de fotos o mensaje si está vacía
             if (photos.isEmpty()) {
-                // Mensaje cuando no hay fotos
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No hay fotos.\nPresiona + para añadir una imagen",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = "No hay fotos.\nPresiona + para añadir una imagen",
+                    modifier = Modifier.align(Alignment.Center),
+                    textAlign = TextAlign.Center
+                )
             } else {
-                // Cuadrícula de fotos usando LazyVerticalGrid
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(photos) { photo ->
@@ -215,52 +197,31 @@ fun PhotoGalleryApp(viewModel: PhotoGalleryViewModel = viewModel()) {
         }
     }
 
-    // Dialog para seleccionar entre galería y cámara
+    // Dialog de opciones
     if (showOptionsDialog) {
         AlertDialog(
             onDismissRequest = { showOptionsDialog = false },
-            title = {
-                Text(
-                    text = "Añadir foto",
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
-            text = {
-                Text(
-                    text = "Selecciona de dónde quieres obtener la foto",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
+            title = { Text("Añadir foto") },
+            text = { Text("Selecciona de dónde quieres obtener la foto") },
             confirmButton = {
                 Row {
                     TextButton(
                         onClick = {
                             showOptionsDialog = false
-                            // Usar PickVisualMediaRequest con ImageOnly
                             photoPickerLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
                         }
                     ) {
-                        Text(
-                            text = "Galería",
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Text("Galería")
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
 
-                    // Botón de cámara SIN ICONO para evitar errores
                     TextButton(
-                        onClick = {
-                            showOptionsDialog = false
-                            cameraLauncher.launch(photoUri)
-                        }
+                        onClick = { openCamera() }
                     ) {
-                        Text(
-                            text = "Cámara",
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Text("Cámara")
                     }
                 }
             },
@@ -268,55 +229,43 @@ fun PhotoGalleryApp(viewModel: PhotoGalleryViewModel = viewModel()) {
                 TextButton(
                     onClick = { showOptionsDialog = false }
                 ) {
-                    Text(
-                        text = "Cancelar",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("Cancelar")
                 }
-            },
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+            }
         )
     }
 }
 
 @Composable
 fun PhotoItem(photo: Photo) {
-    // Card que contiene la imagen y el nombre
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f), // Mantener aspecto cuadrado
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            .aspectRatio(1f)
+            .padding(4.dp),
+        elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Imagen usando AsyncImage de Coil
             AsyncImage(
                 model = photo.uri,
                 contentDescription = photo.name,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                    .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
             )
 
-            // Nombre de la foto
             Text(
                 text = photo.name,
-                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                textAlign = TextAlign.Center
             )
         }
     }
